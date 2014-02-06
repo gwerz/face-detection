@@ -6,6 +6,8 @@
 //
 //
 
+#import <MediaPlayer/MediaPlayer.h>
+
 #import "RecognizeViewController.h"
 #import "OpenCVData.h"
 
@@ -14,8 +16,8 @@
 
 
 @interface RecognizeViewController ()
+@property (nonatomic, strong) MPMoviePlayerController *mpc;
 - (IBAction)switchCameraClicked:(id)sender;
-
 @end
 
 @implementation RecognizeViewController
@@ -28,6 +30,22 @@
     self.faceRecognizer = [[CustomFaceRecognizer alloc] initWithEigenFaceRecognizer];
     
     [self setupCamera];
+    
+    self.view.backgroundColor = [UIColor blueColor];
+    
+    BOOL isLandscape = UIInterfaceOrientationIsLandscape(self.interfaceOrientation);
+    CGFloat width = isLandscape?CGRectGetHeight(self.view.bounds):CGRectGetWidth(self.view.bounds);
+    CGFloat height = isLandscape?CGRectGetWidth(self.view.bounds):CGRectGetHeight(self.view.bounds);
+    UIImageView *backView = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, width, height)];
+    backView.contentMode = UIViewContentModeScaleToFill;
+    backView.image = [UIImage imageNamed:@"InactiveFace.jpg"];
+    backView.tag = 111;
+    [self.view addSubview:backView];
+    
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(movieFinished)
+                                                 name:MPMoviePlayerPlaybackDidFinishNotification
+                                               object:nil];
 }
 
 - (void)viewDidAppear:(BOOL)animated
@@ -51,11 +69,13 @@
 
 - (void)setupCamera
 {
-    self.videoCamera = [[CvVideoCamera alloc] initWithParentView:self.imageView];
+    self.videoCamera = [[CvVideoCamera alloc] initWithParentView:nil];//self.imageView
     self.videoCamera.delegate = self;
     self.videoCamera.defaultAVCaptureDevicePosition = AVCaptureDevicePositionFront;
     self.videoCamera.defaultAVCaptureSessionPreset = AVCaptureSessionPreset352x288;
-    self.videoCamera.defaultAVCaptureVideoOrientation = AVCaptureVideoOrientationPortrait;
+    AVCaptureVideoOrientation orientation = UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad?
+    AVCaptureVideoOrientationLandscapeRight:AVCaptureVideoOrientationPortrait;
+    self.videoCamera.defaultAVCaptureVideoOrientation = orientation;
     self.videoCamera.defaultFPS = CAPTURE_FPS;
     self.videoCamera.grayscaleMode = NO;
 }
@@ -74,10 +94,37 @@
 - (void)parseFaces:(const std::vector<cv::Rect> &)faces forImage:(cv::Mat&)image
 {
     // No faces found
-    if (faces.size() != 1) {
-        [self noFaceToDisplay];
-        return;
-    }
+    UIView *backView = [self.view viewWithTag:111];
+    dispatch_sync(dispatch_get_main_queue(), ^{
+        if (!faces.size()) {
+            if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad && backView.hidden) {
+                [_mpc stop];
+                [_mpc.view removeFromSuperview];
+                _mpc = nil;
+                backView.hidden = NO;
+            }
+            
+            return;
+        }
+        
+        if (!backView.hidden) {
+            backView.hidden = YES;
+            NSString *path = [[NSBundle mainBundle] pathForResource:@"Nike_Football" ofType:@"mov"];
+            NSURL *fileURL = [NSURL fileURLWithPath:path];
+            _mpc = [[MPMoviePlayerController alloc] initWithContentURL:fileURL];
+            _mpc.view.frame = CGRectMake(0, 0, 1024, 768);
+            [self.view addSubview:_mpc.view];
+            _mpc.fullscreen = YES;
+            _mpc.repeatMode = MPMovieRepeatModeNone;
+            [_mpc prepareToPlay];
+            [_mpc play];
+            
+            [self.videoCamera stop];
+        }
+
+    });
+    
+    return;
     
     // We only care about the first face
     cv::Rect face = faces[0];
@@ -147,4 +194,16 @@
     
     [self.videoCamera start];
 }
+
+- (void)movieFinished
+{
+    [_mpc stop];
+    [_mpc.view removeFromSuperview];
+    _mpc = nil;
+    
+    UIView *backView = [self.view viewWithTag:111];
+    backView.hidden = NO;
+    [self.videoCamera start];
+}
+
 @end

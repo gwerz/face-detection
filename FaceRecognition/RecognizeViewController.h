@@ -14,6 +14,7 @@
 @interface RecognizeViewController : UIViewController <CvVideoCameraDelegate>
 
 @property (nonatomic, strong) IBOutlet UIImageView *imageView;
+@property (nonatomic, strong) IBOutlet UIWebView    *videoView;
 @property (nonatomic, strong) IBOutlet UILabel *instructionLabel;
 @property (nonatomic, strong) IBOutlet UILabel *confidenceLabel;
 @property (nonatomic, strong) FaceDetector *faceDetector;
