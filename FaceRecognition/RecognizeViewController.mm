@@ -16,7 +16,8 @@
 
 
 @interface RecognizeViewController ()
-@property (nonatomic, strong) MPMoviePlayerController *mpc;
+@property (nonatomic, strong) UIWebView *webView;
+@property (nonatomic, assign) BOOL  hasFace;
 - (IBAction)switchCameraClicked:(id)sender;
 @end
 
@@ -36,16 +37,11 @@
     BOOL isLandscape = UIInterfaceOrientationIsLandscape(self.interfaceOrientation);
     CGFloat width = isLandscape?CGRectGetHeight(self.view.bounds):CGRectGetWidth(self.view.bounds);
     CGFloat height = isLandscape?CGRectGetWidth(self.view.bounds):CGRectGetHeight(self.view.bounds);
-    UIImageView *backView = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, width, height)];
-    backView.contentMode = UIViewContentModeScaleToFill;
-    backView.image = [UIImage imageNamed:@"InactiveFace.jpg"];
-    backView.tag = 111;
-    [self.view addSubview:backView];
-    
-    [[NSNotificationCenter defaultCenter] addObserver:self
-                                             selector:@selector(movieFinished)
-                                                 name:MPMoviePlayerPlaybackDidFinishNotification
-                                               object:nil];
+    _webView = [[UIWebView alloc] initWithFrame:CGRectMake(0, 0, width, height)];
+    _webView.backgroundColor = [UIColor groupTableViewBackgroundColor];
+    [_webView loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:@"http://www.google.com"]]];
+    [_webView.scrollView setContentInset:UIEdgeInsetsMake(20, 0, 0, 0)];
+    [self.view addSubview:_webView];
 }
 
 - (void)viewDidAppear:(BOOL)animated
@@ -94,34 +90,19 @@
 - (void)parseFaces:(const std::vector<cv::Rect> &)faces forImage:(cv::Mat&)image
 {
     // No faces found
-    UIView *backView = [self.view viewWithTag:111];
     dispatch_sync(dispatch_get_main_queue(), ^{
         if (!faces.size()) {
-            if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad && backView.hidden) {
-                [_mpc stop];
-                [_mpc.view removeFromSuperview];
-                _mpc = nil;
-                backView.hidden = NO;
+            if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad && _hasFace) {
+                _hasFace = NO;
+                [_webView loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:@"http://www.google.com"]]];
             }
-            
             return;
         }
         
-        if (!backView.hidden) {
-            backView.hidden = YES;
-            NSString *path = [[NSBundle mainBundle] pathForResource:@"Nike_Football" ofType:@"mov"];
-            NSURL *fileURL = [NSURL fileURLWithPath:path];
-            _mpc = [[MPMoviePlayerController alloc] initWithContentURL:fileURL];
-            _mpc.view.frame = CGRectMake(0, 0, 1024, 768);
-            [self.view addSubview:_mpc.view];
-            _mpc.fullscreen = YES;
-            _mpc.repeatMode = MPMovieRepeatModeNone;
-            [_mpc prepareToPlay];
-            [_mpc play];
-            
-            [self.videoCamera stop];
+        if (!_hasFace) {
+            [_webView loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:@"http://www.yahoo.com"]]];
+            _hasFace = YES;
         }
-
     });
     
     return;
@@ -192,17 +173,6 @@
         self.videoCamera.defaultAVCaptureDevicePosition = AVCaptureDevicePositionFront;
     }
     
-    [self.videoCamera start];
-}
-
-- (void)movieFinished
-{
-    [_mpc stop];
-    [_mpc.view removeFromSuperview];
-    _mpc = nil;
-    
-    UIView *backView = [self.view viewWithTag:111];
-    backView.hidden = NO;
     [self.videoCamera start];
 }
 
