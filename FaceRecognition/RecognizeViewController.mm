@@ -14,17 +14,17 @@
 
 
 #define CAPTURE_FPS 30
+#define WEBVIEWNUM  1
 
-
-@interface RecognizeViewController ()
+@interface RecognizeViewController ()<UIWebViewDelegate>
 @property (nonatomic, strong) UIWebView *webView;
 @property (nonatomic, strong) IBOutlet UIView *firebaseView;
 @property (nonatomic, strong) IBOutlet UILabel *titleLable;
 @property (nonatomic, strong) IBOutlet UILabel *priceLabel;
 @property (nonatomic, strong) IBOutlet UILabel *descriptionLabel;
 @property (nonatomic, strong) IBOutlet UIImageView *backImageView;
-
 @property (nonatomic, assign) BOOL  hasFace;
+@property (nonatomic, assign) NSUInteger    viewCount;
 - (IBAction)switchCameraClicked:(id)sender;
 @end
 
@@ -41,37 +41,39 @@
     
     self.view.backgroundColor = [UIColor blueColor];
     
-//    BOOL isLandscape = UIInterfaceOrientationIsLandscape(self.interfaceOrientation);
-//    CGFloat width = isLandscape?CGRectGetHeight(self.view.bounds):CGRectGetWidth(self.view.bounds);
-//    CGFloat height = isLandscape?CGRectGetWidth(self.view.bounds):CGRectGetHeight(self.view.bounds);
-//    _webView = [[UIWebView alloc] initWithFrame:CGRectMake(0, 0, width, height)];
-//    _webView.backgroundColor = [UIColor groupTableViewBackgroundColor];
-//    [_webView loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:@"http://www.google.com"]]];
-//    [_webView.scrollView setContentInset:UIEdgeInsetsMake(20, 0, 0, 0)];
-//    [self.view addSubview:_webView];
+    MPMoviePlayerController *controller;
+    controller.controlStyle = MPMovieControlStyleNone;
+    
+    _titleLable.hidden = WEBVIEWNUM;
+    _priceLabel.hidden = WEBVIEWNUM;
+    _descriptionLabel.hidden = WEBVIEWNUM;
+    _backImageView.hidden = WEBVIEWNUM;
+    
+    if (WEBVIEWNUM) {
+        BOOL isLandscape = UIInterfaceOrientationIsLandscape(self.interfaceOrientation);
+        CGFloat width = isLandscape?CGRectGetHeight(self.view.bounds):CGRectGetWidth(self.view.bounds);
+        CGFloat height = isLandscape?CGRectGetWidth(self.view.bounds):CGRectGetHeight(self.view.bounds);
+        _webView = [[UIWebView alloc] initWithFrame:CGRectMake(0, 0, width, height)];
+        _webView.backgroundColor = [UIColor groupTableViewBackgroundColor];
+        _webView.mediaPlaybackRequiresUserAction = NO;
+        [_webView loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:@"http://www.google.com"]]];
+        [_webView.scrollView setContentInset:UIEdgeInsetsMake(0, 0, 0, 0)];
+        [self.view addSubview:_webView];
+    }
     
     Firebase *f = [[Firebase alloc] initWithUrl:@"https://promowall.firebaseio.com/"];
-    [f observeEventType:FEventTypeValue withBlock:^(FDataSnapshot *snapshot) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            _titleLable.text = snapshot.value[@"title"];
-            NSString *description = snapshot.value[@"description"];
-            NSAttributedString *attString = [[NSAttributedString alloc] initWithString:description
-                                                                            attributes:@{NSFontAttributeName:_descriptionLabel.font}];
-            CGRect bound = [attString boundingRectWithSize:CGSizeMake(300, CGFLOAT_MAX)
-                                                   options:NSStringDrawingUsesLineFragmentOrigin
-                                                   context:nil];
-            CGFloat x = CGRectGetMinX(_descriptionLabel.frame), y = CGRectGetMinY(_descriptionLabel.frame);
-            _descriptionLabel.frame = CGRectMake(x, y, CGRectGetWidth(bound), CGRectGetHeight(bound)+5.f);
-            _descriptionLabel.text = description;
-            CGFloat price = [snapshot.value[@"price"] floatValue];
-            _priceLabel.text = [NSString stringWithFormat:@"$%.2f", price];
-            
-            dispatch_queue_t queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT,0);
-            dispatch_async(queue, ^{
-                UIImage *image = [[UIImage alloc] initWithData:[NSData dataWithContentsOfURL:[NSURL URLWithString:snapshot.value[@"image"]]]];
-                dispatch_async(dispatch_get_main_queue(), ^{_backImageView.image = image;});
-            });
-        });
+    [f observeSingleEventOfType:FEventTypeValue withBlock:^(FDataSnapshot *snapshot) {
+        if (!WEBVIEWNUM) {
+            [self updateWithSnapshot:snapshot];
+        }else{
+            NSString *urlString = [NSString stringWithFormat:@"http://prodigy2m.urle.me/wall/tablet%d.html", WEBVIEWNUM];
+            [_webView loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:urlString]
+                                                   cachePolicy:NSURLRequestReloadIgnoringLocalCacheData
+                                               timeoutInterval:15.f]];
+            NSString *terminal = [NSString stringWithFormat:@"Terminal%d", WEBVIEWNUM];
+            _viewCount = [snapshot.value[terminal][@"viewed"] integerValue];
+            NSLog(@"%@", snapshot.value);
+        }
     }];
 }
 
@@ -122,20 +124,20 @@
 {
     // No faces found
     dispatch_sync(dispatch_get_main_queue(), ^{
-        Firebase *f = [[Firebase alloc] initWithUrl:@"https://promowall.firebaseio.com/"];
+        Firebase *f = [[Firebase alloc] initWithUrl:[NSString stringWithFormat:@"https://promowall.firebaseio.com/Terminal%d", WEBVIEWNUM]];
         if (!faces.size()) {
             if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad && _hasFace) {
                 _hasFace = NO;
-                [[f childByAppendingPath:@"facerecognition"] setValue:@"0"];
-                [_webView loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:@"http://www.google.com"]]];
+                [[f childByAppendingPath:@"facerecognition"] setValue:@"2"];
             }
             return;
         }
         
         if (!_hasFace) {
             [[f childByAppendingPath:@"facerecognition"] setValue:@"1"];
-            [_webView loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:@"http://www.yahoo.com"]]];
+            [[f childByAppendingPath:@"viewed"] setValue:@(++_viewCount)];
             _hasFace = YES;
+            NSLog(@"view count %d", _viewCount);
         }
     });
     
@@ -208,6 +210,39 @@
     }
     
     [self.videoCamera start];
+}
+
+#pragma mark - UIWebView Delegate
+
+- (void)webViewDidFinishLoad:(UIWebView *)webView
+{
+    [webView reload];
+}
+
+#pragma mark - Helper Methods
+
+- (void)updateWithSnapshot:(FDataSnapshot *)snapshot
+{
+    dispatch_async(dispatch_get_main_queue(), ^{
+        _titleLable.text = snapshot.value[@"title"];
+        NSString *description = snapshot.value[@"description"];
+        NSAttributedString *attString = [[NSAttributedString alloc] initWithString:description
+                                                                        attributes:@{NSFontAttributeName:_descriptionLabel.font}];
+        CGRect bound = [attString boundingRectWithSize:CGSizeMake(300, CGFLOAT_MAX)
+                                               options:NSStringDrawingUsesLineFragmentOrigin
+                                               context:nil];
+        CGFloat x = CGRectGetMinX(_descriptionLabel.frame), y = CGRectGetMinY(_descriptionLabel.frame);
+        _descriptionLabel.frame = CGRectMake(x, y, CGRectGetWidth(bound), CGRectGetHeight(bound)+5.f);
+        _descriptionLabel.text = description;
+        CGFloat price = [snapshot.value[@"price"] floatValue];
+        _priceLabel.text = [NSString stringWithFormat:@"$%.2f", price];
+        
+        dispatch_queue_t queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT,0);
+        dispatch_async(queue, ^{
+            UIImage *image = [[UIImage alloc] initWithData:[NSData dataWithContentsOfURL:[NSURL URLWithString:snapshot.value[@"image"]]]];
+            dispatch_async(dispatch_get_main_queue(), ^{_backImageView.image = image;});
+        });
+    });
 }
 
 @end
